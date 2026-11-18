@@ -8,7 +8,7 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
-from detector import DetectorUnavailable, choose_detection
+from detector import DetectorUnavailable, INFERENCE_LOCK, choose_detection, locate_subjects
 from main import StudioHandler
 from narration import NarrationError, collect_audio, narration_events
 from soundtrack import LOOP_SECONDS, make_loop, music_prompt
@@ -102,6 +102,15 @@ class DetectorTests(unittest.TestCase):
         self.assertIsNone(choose_detection([(left, 0.2)], None))
         self.assertIsNone(choose_detection([(left, 0.52), (right, 0.48)], None))
         self.assertEqual(choose_detection([(left, 0.52), (right, 0.48)], right), (right, 0.48))
+
+    def test_detector_skips_busy_work_and_releases_lock_after_a_timeout(self):
+        with INFERENCE_LOCK:
+            with self.assertRaisesRegex(DetectorUnavailable, "busy"):
+                locate_subjects(IMAGE, [{"label": "rabbit"}])
+        with patch("detector.DETECTION_SECONDS", 0), patch("detector._load_detector"):
+            with self.assertRaisesRegex(DetectorUnavailable, "took too long"):
+                locate_subjects(IMAGE, [{"label": "rabbit"}])
+        self.assertFalse(INFERENCE_LOCK.locked())
 
     def test_local_detection_needs_no_provider_credentials(self):
         payload = {"action": "localize", "data": {"image": IMAGE, "candidates": [{"label": "rabbit"}]}}

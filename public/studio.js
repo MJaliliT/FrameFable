@@ -404,14 +404,25 @@ function refinedImageBox(box, crop, imageWidth, imageHeight) {
   };
 }
 
+async function requestWithDeadline(action, data, timeLimit, timeoutMessage) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeLimit);
+  try {
+    return await request(action, data, settings, apiKey, controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(timeoutMessage);
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
 async function locateSubjectBoxes(src, subjects) {
   const candidates = subjects.filter(({ label }) => label.trim()).slice(0, 6);
-  if (!candidates.length) return true;
-  const result = await request('localize', {
+  if (!candidates.length) return '';
+  const result = await requestWithDeadline('localize', {
     image: src,
     candidates: candidates.map(({ label, box }) => ({ label: label.trim().slice(0, 200), hint: box }))
-  });
-  if (!result.available) return false;
+  }, 35_000, 'Grounding DINO did not respond within 35 seconds.');
+  if (!result.available) return result.reason || 'Grounding DINO was unavailable.';
   subjects.forEach((subject) => {
     subject.box = null;
     subject.boxSource = 'detector';
@@ -420,10 +431,10 @@ async function locateSubjectBoxes(src, subjects) {
     const detection = result.detections[index];
     if (usableBox(detection?.box)) subject.box = detection.box;
   });
-  return true;
+  return '';
 }
 
-async function refineSubjectBoxes(src, subjects) {
+async function refineSubjectBoxes(src, subjects, timeLimit) {
   const candidates = subjects.filter(({ box }) => usableBox(box)).slice(0, 6);
   if (!candidates.length) return;
   const source = imageNode(src, '');
@@ -459,10 +470,10 @@ async function refineSubjectBoxes(src, subjects) {
     context.fillText(String(index + 1), tileX + 9, tileY + 24);
     return { x, y, width, height, scale, offsetX, offsetY };
   });
-  const result = await request('refine', {
+  const result = await requestWithDeadline('refine', {
     image: canvas.toDataURL('image/jpeg', 0.9),
     candidates: candidates.map(({ label, detail }, index) => ({ tile: index + 1, label, detail }))
-  });
+  }, timeLimit, 'The fallback refinement took too long.');
   for (const [index, subject] of candidates.entries()) {
     const matches = result.boxes.filter(({ tile }) => tile === index + 1);
     if (matches.length !== 1) continue;
@@ -576,20 +587,25 @@ $('analyze').addEventListener('click', () => work(async () => {
   const signature = JSON.stringify([key, images.map(({ id }) => id)]);
   analysisCacheHits = images.filter((image) => image.analysis.has(key)).length;
   matchCacheHit = subjectSignature === signature;
-  let detectorAvailable = true;
+  let detectorIssue = '';
+  let refinementBudget = 15_000;
   for (const [index, image] of images.entries()) {
     if (image.analysis.has(key)) continue;
     notify('Analyzing image ' + (index + 1) + ' of ' + images.length + '…');
     const result = await request('analyze', { image: image.src });
-    if (detectorAvailable && result.subjects.length) {
+    if (!detectorIssue && result.subjects.length) {
       notify('Locating subjects with Grounding DINO in image ' + (index + 1) + ' of ' + images.length + '…');
-      try { detectorAvailable = await locateSubjectBoxes(image.src, result.subjects); }
-      catch { detectorAvailable = false; }
+      const started = performance.now();
+      try { detectorIssue = await locateSubjectBoxes(image.src, result.subjects); }
+      catch (error) { detectorIssue = error.message; }
+      if (detectorIssue && performance.now() - started >= 15_000) refinementBudget = 0;
     }
-    if (!detectorAvailable && result.subjects.some(({ box }) => usableBox(box))) {
+    if (detectorIssue && refinementBudget > 0 && result.subjects.some(({ box }) => usableBox(box))) {
       notify('Refining bounding boxes for image ' + (index + 1) + ' of ' + images.length + '…');
-      try { await refineSubjectBoxes(image.src, result.subjects); }
+      const started = performance.now();
+      try { await refineSubjectBoxes(image.src, result.subjects, refinementBudget); }
       catch { /* Keep initial boxes if the optional refinement fails. */ }
+      finally { refinementBudget -= performance.now() - started; }
     }
     image.analysis.set(key, result);
   }
@@ -605,7 +621,7 @@ $('analyze').addEventListener('click', () => work(async () => {
   }
   highest = Math.max(highest, 1);
   renderSubjects();
-  notify(detectorAvailable ? '' : 'Grounding DINO was unavailable. These boxes are estimated by the selected vision model.');
+  notify(detectorIssue ? detectorIssue + ' The affected boxes are estimates from the selected vision model.' : '');
   show(1);
 }, { coverPanel: true }));
 

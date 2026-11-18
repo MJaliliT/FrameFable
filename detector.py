@@ -8,11 +8,13 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
+from time import monotonic
 
 MODEL_ID = "IDEA-Research/grounding-dino-tiny"
 MODEL_DIR = Path(__file__).resolve().parent / ".models" / "grounding-dino-tiny"
 MIN_SCORE = 0.40
 INFERENCE_LOCK = Lock()
+DETECTION_SECONDS = 30
 EDGES = ("left", "top", "right", "bottom")
 
 
@@ -110,8 +112,13 @@ def _detections(image, label, model_parts):
 
 
 def locate_subjects(image_url, candidates):
-    with INFERENCE_LOCK:
+    if not INFERENCE_LOCK.acquire(blocking=False):
+        raise DetectorUnavailable("Grounding DINO is busy processing another image.")
+    deadline = monotonic() + DETECTION_SECONDS
+    try:
         model_parts = _load_detector()
+        if monotonic() >= deadline:
+            raise DetectorUnavailable("Grounding DINO took too long on this server.")
         from PIL import Image
 
         try:
@@ -127,12 +134,20 @@ def locate_subjects(image_url, candidates):
         selections = []
         try:
             for candidate in candidates:
+                if monotonic() >= deadline:
+                    raise DetectorUnavailable("Grounding DINO took too long on this server.")
                 label = candidate["label"].strip().casefold()
                 if label not in detected:
                     detected[label] = list(_detections(image, label, model_parts))
                 selections.append(choose_detection(detected[label], _hint(candidate, image.width, image.height)))
+            if monotonic() >= deadline:
+                raise DetectorUnavailable("Grounding DINO took too long on this server.")
+        except DetectorUnavailable:
+            raise
         except (RuntimeError, OSError) as error:
             raise DetectorUnavailable("Grounding DINO could not process this image.") from error
+    finally:
+        INFERENCE_LOCK.release()
     results = []
     for index, selection in enumerate(selections):
         if selection is None:
