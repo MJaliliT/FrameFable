@@ -175,6 +175,7 @@ def main():
         server = ThreadingHTTPServer((host, 0), StudioHandler)
         print(f"Port {port} is in use. Using port {server.server_port} instead.", flush=True)
 
+
     with server:
         print(f"FrameFable is running at http://127.0.0.1:{server.server_port}", flush=True)
         try:
