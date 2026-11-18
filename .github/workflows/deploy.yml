@@ -1,0 +1,72 @@
+name: CI and VPS deployment
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Test application
+        run: |
+          python -m pip install -r requirements-pdf.txt -r requirements-audio.txt numpy
+          python -B -m unittest -v
+          node --check public/studio.js
+          bash -n deploy/activate-release.sh
+          sh -n run.sh
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: framefable-vps
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Deploy tested commit over SSH
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VPS_HOST: ${{ vars.VPS_HOST || '72.60.165.248' }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          if [ "$GITHUB_SHA" != "$main_sha" ]; then
+            printf '%s\n' 'Skipping this deployment because main has advanced.'
+            exit 0
+          fi
+          : "${VPS_SSH_KEY:?Configure the VPS_SSH_KEY repository secret}"
+          : "${VPS_KNOWN_HOSTS:?Configure the VPS_KNOWN_HOSTS repository secret}"
+          umask 077
+          ssh_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/deploy_key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+
+          git archive --format=tar.gz "$GITHUB_SHA" -- \
+            main.py providers.py detector.py narration.py soundtrack.py story_pdf.py \
+            run.sh public requirements-audio.txt requirements-detector.txt requirements-pdf.txt |
+            ssh -T -p "$VPS_PORT" -i "$ssh_dir/deploy_key" \
+              -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+              -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+              -- "framefable-deploy@$VPS_HOST" "/usr/local/bin/framefable-deploy $GITHUB_SHA"

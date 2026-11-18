@@ -1,0 +1,10 @@
+.venv/
+.models/
+__pycache__/
+.idea/
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+id_ed25519*

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#eef3fc">
+<title>FrameFable</title>
+<link rel="stylesheet" href="/studio.css">
+<script type="module" src="/studio.js"></script>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="brand-icon" aria-hidden="true"></span><span>FrameFable</span></div>
+  <nav aria-label="Story workflow" id="steps">
+    <button type="button" data-step="0"><span>01</span> Story setup</button>
+    <button type="button" data-step="1"><span>02</span> Characters &amp; objects</button>
+    <button type="button" data-step="2"><span>03</span> Connecting scenes</button>
+    <button type="button" data-step="3"><span>04</span> Story &amp; results</button>
+  </nav>
+  <button type="button" id="settings-button" class="settings-button"><span aria-hidden="true">⚙</span> Settings <small id="provider-badge">OpenAI</small></button>
+</aside>
+<main>
+  <header class="topbar"><span>Story workspace</span><button type="button" id="exports">Research exports</button></header>
+  <div class="workspace">
+    <header class="page-heading"><p id="step-label"></p><h1 id="page-title"></h1><p id="page-description"></p></header>
+    <p id="status" class="status" role="status" hidden></p>
+    <section id="setup" class="stage">
+      <section class="card">
+        <div class="card-header"><div><h2>Image sequence</h2><p>Drag a thumbnail onto another image to move it to that position.</p></div><span class="count" id="image-count">0 / 20</span></div>
+        <label id="dropzone" class="dropzone" for="upload">
+          <span class="upload-icon" aria-hidden="true">＋</span>
+          <strong>Choose images or drop them here</strong><small>JPG, PNG or WebP · up to 20 images</small>
+          <input id="upload" type="file" multiple accept="image/jpeg,image/png,image/webp" aria-label="Choose story images">
+        </label>
+        <ol id="sequence" class="image-grid"></ol>
+      </section>
+      <section class="card">
+        <div class="card-header"><div><h2>Story preferences</h2><p>Choose a tone, reading level, and approximate length.</p></div></div>
+        <div class="fields preferences">
+          <label>Tone<select id="tone"><option>Humorous</option><option>Suspenseful</option><option>Mystery</option></select></label>
+          <label>Reading level<select id="level"><option>Beginning</option><option selected>Developing</option><option>Expanding</option><option>Advanced</option></select></label>
+          <label>Story length<select id="length"><option value="250">Short · ~250 words</option><option value="450" selected>Medium · ~450 words</option><option value="750">Long · ~750 words</option></select></label>
+        </div>
+      </section>
+      <div class="actions"><button id="analyze" class="primary">Analyze images</button></div>
+    </section>
+    <section id="characters" class="stage" hidden>
+      <div id="subject-list"></div>
+      <div class="actions"><button data-back="0">Back to setup</button><button id="plan" class="primary">Find connecting scenes</button></div>
+    </section>
+    <section id="bridges" class="stage" hidden>
+      <section class="card" id="bridge-sequence-card" hidden>
+        <h2>Image sequence</h2>
+        <ol id="bridge-sequence" class="bridge-sequence"></ol>
+      </section>
+      <div id="bridge-list"></div>
+      <div class="actions"><button data-back="1">Back to subjects</button><button id="generate" class="primary">Generate story</button></div>
+    </section>
+    <section id="results" class="stage" hidden>
+      <article class="card book" id="story"></article>
+      <div class="result-actions">
+        <button type="button" data-back="2">Back to scenes</button>
+        <div class="actions">
+          <button type="button" id="start-over">Start over</button>
+          <button type="button" id="download-story">Download story PDF</button>
+          <button type="button" id="generate-another" class="primary">Generate another story</button>
+        </div>
+      </div>
+    </section>
+  </div>
+  <footer class="site-footer">
+    <span>A group project by Mohammad Jalili Torkamani, Sheila Foley, and Roxana Shajarian.</span>
+    <span>© 2026 FrameFable</span>
+  </footer>
+  <div id="analysis-overlay" class="analysis-overlay" aria-hidden="true" hidden>
+    <div class="analysis-progress">
+      <span class="analysis-spinner"></span>
+      <p id="analysis-progress-text">Analyzing images…</p>
+    </div>
+  </div>
+</main>
+<dialog id="start-over-dialog" aria-labelledby="start-over-title">
+  <form method="dialog">
+    <h2 id="start-over-title">Start over?</h2>
+    <p>This clears the current images, story preferences, and generated story. Download the story first if you want to keep it.</p>
+    <div class="actions">
+      <button type="submit" value="cancel" autofocus>Cancel</button>
+      <button type="submit" value="reset" class="primary">Start over</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="settings">
+  <form id="settings-form">
+    <div class="dialog-heading"><div><h2>Settings</h2><p>Choose how the studio analyzes images and writes stories.</p></div><button type="button" class="close" aria-label="Close settings">×</button></div>
+    <div class="fields">
+      <label>Provider<select id="provider"><option value="openai">OpenAI</option><option value="ollama">Ollama</option></select></label>
+      <div class="fields" id="openai-fields">
+        <label>API key<input type="password" id="api-key" autocomplete="off" placeholder="sk-…"><small>Kept in this tab’s memory. You can also set OPENAI_API_KEY on the local server.</small></label>
+        <button type="button" id="list-openai-models">Load vision models</button>
+        <label id="openai-model-list" hidden>Available OpenAI vision models
+          <select id="openai-models" size="5"></select>
+          <small>Choose a model here or enter another vision model ID below.</small>
+        </label>
+        <label>Vision model ID<input id="openai-model" value="gpt-6.1-terra" maxlength="150" required></label>
+        <label class="checkbox"><input type="checkbox" id="bridge-images"> Enable optional OpenAI bridge illustrations</label>
+      </div>
+      <div class="fields" id="ollama-fields" hidden>
+        <label>Local endpoint<input type="url" id="endpoint" value="http://127.0.0.1:11434"></label>
+        <button type="button" id="list-models">Load installed models</button>
+        <label id="ollama-model-list" hidden>Installed Ollama models
+          <select id="ollama-models" size="5"></select>
+          <small>Some installed models are text-only. Use Test connection to check for image support.</small>
+        </label>
+        <label>Vision model ID<input id="ollama-model" maxlength="150" placeholder="Choose above or enter a model ID"></label>
+      </div>
+    </div>
+    <p id="settings-status" class="status" role="status" hidden></p>
+    <div class="actions"><button type="button" id="test-provider">Test connection</button><button type="submit" class="primary">Save settings</button></div>
+  </form>
+</dialog>
+<dialog id="research">
+  <div class="dialog-heading"><div><h2>Research exports</h2><p>Download run measurements and the paper’s rating sheet.</p></div><button type="button" class="close" aria-label="Close research exports">×</button></div>
+  <p id="run-count"></p>
+  <div class="export-buttons"><button id="download-ratings">Rating template · CSV</button><button id="download-runs">Run summaries · CSV</button><button id="download-details">Stage details · JSON</button></div>
+</dialog>
+<dialog id="subject-preview" aria-labelledby="subject-preview-title">
+  <div class="dialog-heading"><h2 id="subject-preview-title"></h2><button type="button" class="close" aria-label="Close image preview">×</button></div>
+  <div id="subject-preview-image"></div>
+  <p id="subject-preview-note"></p>
+</dialog>
+</body>
+</html>
