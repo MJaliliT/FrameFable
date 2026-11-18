@@ -114,7 +114,7 @@
         <label class="checkbox"><input type="checkbox" id="bridge-images"> Enable optional OpenAI bridge illustrations</label>
       </div>
       <div class="fields" id="ollama-fields" hidden>
-        <label>Local endpoint<input type="url" id="endpoint" value="http://127.0.0.1:11434"></label>
+        <label id="ollama-endpoint-field">Local endpoint<input type="url" id="endpoint" value="http://127.0.0.1:11434"></label>
         <button type="button" id="list-models">Load installed models</button>
         <label id="ollama-model-list" hidden>Installed Ollama models
           <select id="ollama-models" size="5"></select>

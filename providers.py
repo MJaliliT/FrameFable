@@ -127,12 +127,14 @@ def provider_base(settings):
     if provider != "ollama":
         raise StudioError("Choose OpenAI or Ollama in Settings.")
     default_endpoint = "http://127.0.0.1:11434"
-    endpoint = settings.get("endpoint") or default_endpoint
+    endpoint = settings.get("endpoint")
     if os.environ.get("FRAMEFABLE_PUBLIC_ORIGIN"):
         server_endpoint = os.environ.get("FRAMEFABLE_OLLAMA_ENDPOINT", default_endpoint)
-        if not isinstance(endpoint, str) or endpoint.rstrip("/") != server_endpoint.rstrip("/"):
+        if endpoint and (not isinstance(endpoint, str) or endpoint.rstrip("/") != server_endpoint.rstrip("/")):
             raise StudioError("Use the Ollama endpoint configured by the FrameFable VPS operator.")
         endpoint = server_endpoint
+    else:
+        endpoint = endpoint or default_endpoint
     try:
         url = urlsplit(endpoint)
         hostname = url.hostname

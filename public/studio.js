@@ -1,4 +1,6 @@
 const $ = (id) => document.getElementById(id);
+const hosted = window.location.protocol === 'https:';
+const defaultOllamaEndpoint = 'http://127.0.0.1:11434';
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 let savedTheme;
 try { savedTheme = localStorage.getItem('framefable-theme'); } catch { /* Storage can be disabled. */ }
@@ -37,7 +39,7 @@ const readingGuides = {
   Expanding: 'More varied vocabulary and sentences, with context for unfamiliar words.',
   Advanced: 'Richer vocabulary, more nuanced plot and varied sentence structures.'
 };
-let settings = { provider: 'openai', model: 'gpt-6.1-terra', endpoint: 'http://127.0.0.1:11434', bridgeImages: false };
+let settings = { provider: 'openai', model: 'gpt-6.1-terra', endpoint: defaultOllamaEndpoint, bridgeImages: false };
 let apiKey = '';
 let settingsBusy = false;
 let step = 0;
@@ -1131,19 +1133,22 @@ function settingsFields() {
   $('openai-model').required = openai;
   $('ollama-fields').hidden = openai;
   $('ollama-model').required = !openai;
-  $('endpoint').required = !openai;
+  $('ollama-endpoint-field').hidden = hosted;
+  $('endpoint').disabled = hosted;
+  $('endpoint').required = !openai && !hosted;
 }
 
 function draftSettings() {
   const provider = $('provider').value;
-  return { provider, model: $(provider + '-model').value.trim(), endpoint: $('endpoint').value.trim(),
+  return { provider, model: $(provider + '-model').value.trim(),
+    ...(!hosted && { endpoint: $('endpoint').value.trim() }),
     bridgeImages: $('bridge-images').checked };
 }
 
 $('settings-button').addEventListener('click', () => {
   $('provider').value = settings.provider;
   $(settings.provider + '-model').value = settings.model;
-  $('endpoint').value = settings.endpoint;
+  $('endpoint').value = settings.endpoint ?? defaultOllamaEndpoint;
   $('ollama-model-list').hidden = true;
   $('openai-model-list').hidden = true;
   $('api-key').value = apiKey;
@@ -1164,6 +1169,7 @@ async function settingsWork(task) {
   finally {
     settingsBusy = false;
     for (const node of $('settings-form').querySelectorAll('input, select, button')) node.disabled = false;
+    $('endpoint').disabled = hosted;
   }
 }
 

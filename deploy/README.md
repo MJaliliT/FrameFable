@@ -65,7 +65,7 @@ Verify that `curl -sS -o /dev/null -w '%{http_code}\n' https://stories.example.c
 
 ## 5. Enable features that run on the VPS
 
-OpenAI story generation, bridge illustrations, and narration use the OpenAI API. If you select Ollama, the vision model must be installed on the VPS. By default, the hosted app connects to `http://127.0.0.1:11434` on the VPS.
+OpenAI story generation, bridge illustrations, and narration use the OpenAI API. If you select Ollama, the vision model must be installed on the VPS. By default, the hosted app connects to `http://127.0.0.1:11434` on the VPS. Visitors select a model and the server supplies the endpoint. Set `FRAMEFABLE_OLLAMA_ENDPOINT` in `/etc/framefable.env` only if Ollama uses a different loopback URL.
 
 If the VPS has spare RAM, disk, and CPU capacity, install Grounding DINO and MusicGen into its Python environment. MusicGen's checkpoint alone is about 2.36 GB. Benchmark both models on the VPS before relying on them alongside other services. While the weights are absent, the app uses the vision model's bounding boxes and shows a text story if background music is unavailable.
 
