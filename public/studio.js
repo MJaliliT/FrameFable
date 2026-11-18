@@ -55,6 +55,8 @@ let musicContext;
 let musicGain;
 let musicSource;
 let musicBuffer;
+let musicRequest;
+const MUSIC_WAIT_BEFORE_READING = 40_000;
 let musicMuted = false;
 let ledger = [];
 let analysisCacheHits = 0;
@@ -826,18 +828,20 @@ function stopSoundtrack() {
 }
 
 function clearSoundtrack() {
+  musicRequest?.abort();
+  musicRequest = undefined;
   stopSoundtrack();
   musicBuffer = undefined;
 }
 
-async function prepareSoundtrack(description, tone) {
+async function prepareSoundtrack(description, tone, signal) {
   if (!musicContext) throw new Error('This browser does not support background audio.');
-  const { job } = await request('soundtrack-start', { tone, description }, {}, '');
+  const { job } = await request('soundtrack-start', { tone, description }, {}, '', signal);
   if (!job) throw new Error('The server did not return a music job.');
   const start = performance.now();
-  while (performance.now() - start < 12 * 60_000) {
+  while (!signal.aborted && performance.now() - start < 6 * 60_000) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    const result = await request('soundtrack-result', { job }, {}, '');
+    const result = await request('soundtrack-result', { job }, {}, '', signal);
     if (result instanceof Blob) {
       if (!result.size) throw new Error('MusicGen returned an empty audio file.');
       try { return await musicContext.decodeAudioData(await result.arrayBuffer()); }
@@ -845,7 +849,41 @@ async function prepareSoundtrack(description, tone) {
     }
     if (result?.status !== 'composing') throw new Error('The server returned an unknown music job status.');
   }
-  throw new Error('MusicGen is taking longer than 12 minutes to finish.');
+  throw new Error('MusicGen did not finish in time.');
+}
+
+async function waitForSoundtrack(pending, delay = MUSIC_WAIT_BEFORE_READING) {
+  let timer;
+  try {
+    return await Promise.race([pending, new Promise((resolve) => {
+      timer = setTimeout(() => resolve(null), delay);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+function renderSoundtrack() {
+  const controls = $('story-soundtrack');
+  controls.replaceChildren();
+  if (story.musicStatus) {
+    const status = element('p', story.musicStatus, 'narration-status');
+    status.setAttribute('role', 'status');
+    controls.append(status);
+    return;
+  }
+  if (!musicBuffer) return;
+  const musicButton = button(musicMuted ? 'Unmute music' : 'Mute music', () => {
+    musicMuted = !musicMuted;
+    updateSoundtrackVolume();
+    musicButton.textContent = musicMuted ? 'Unmute music' : 'Mute music';
+  });
+  controls.append(musicButton, element('span', 'Looping instrumental'));
+}
+
+function applySoundtrack(outcome) {
+  musicBuffer = outcome.buffer;
+  story.musicStatus = outcome.error ? 'Background music unavailable. ' + outcome.error : '';
+  renderSoundtrack();
+  if (step === 3) startSoundtrack();
 }
 
 function storyHeader() {
@@ -877,21 +915,15 @@ function storyHeader() {
     controls.append(play, element('span', 'AI-generated narration'), status);
     header.append(controls);
   }
-  if (musicBuffer) {
-    const music = element('div', undefined, 'story-narration story-soundtrack');
-    const musicButton = button(musicMuted ? 'Unmute music' : 'Mute music', () => {
-      musicMuted = !musicMuted;
-      updateSoundtrackVolume();
-      musicButton.textContent = musicMuted ? 'Unmute music' : 'Mute music';
-    });
-    music.append(musicButton, element('span', 'Looping instrumental'));
-    header.append(music);
-  }
+  const music = element('div', undefined, 'story-narration story-soundtrack');
+  music.id = 'story-soundtrack';
+  header.append(music);
   return header;
 }
 
 function renderStory(sequence) {
   $('story').replaceChildren(storyHeader());
+  renderSoundtrack();
   for (const { scene, text } of story.scenes) {
     const item = sequence[scene - 1];
     const row = element('section', undefined, 'story-scene');
@@ -927,22 +959,30 @@ async function generateStory(previousStory) {
   if (!result.title.trim() || ordered.length !== sequence.length || ordered.some(({ scene, text }, index) => scene !== index + 1 || !text.trim())) {
     throw new Error('The story did not include every scene. Try generating again.');
   }
-  stopSoundtrack();
-  notify('Composing the background music. This may take several minutes…');
+  clearSoundtrack();
+  notify('Composing the background music…');
   const description = result.musicDescription?.trim().slice(0, 300) || 'Gentle acoustic storybook music.';
-  let soundtrack;
-  let musicError = '';
-  try {
-    soundtrack = await prepareSoundtrack(description, storyPreferences.tone);
-  } catch (error) {
-    musicError = 'Background music unavailable. ' + error.message;
-  }
+  const controller = new AbortController();
+  musicRequest = controller;
+  const pending = prepareSoundtrack(description, storyPreferences.tone, controller.signal)
+    .then((buffer) => ({ buffer }), (error) => ({ error: error.message }));
+  const soundtrack = await waitForSoundtrack(pending);
   clearNarration();
-  musicBuffer = soundtrack;
   const createdAt = new Date();
-  story = { title: result.title, scenes: ordered, sequence, preferences: storyPreferences,
+  const current = story = { title: result.title, scenes: ordered, sequence, preferences: storyPreferences,
     provider: settings.provider, sourceImages: images.length,
-    createdAt: createdAt.toISOString(), createdAtLabel: storyTimestamp.format(createdAt) };
+    createdAt: createdAt.toISOString(), createdAtLabel: storyTimestamp.format(createdAt),
+    musicStatus: soundtrack?.error ? 'Background music unavailable. ' + soundtrack.error
+      : soundtrack ? '' : 'Background music is still composing and will start automatically.' };
+  musicBuffer = soundtrack?.buffer;
+  if (!soundtrack) {
+    void pending.then((outcome) => {
+      if (story === current && !controller.signal.aborted) applySoundtrack(outcome);
+      if (musicRequest === controller) musicRequest = undefined;
+    });
+  } else {
+    musicRequest = undefined;
+  }
   const naming = subjects.some(({ name }) => name.trim()) ? 'User-provided names' : 'Automatic names';
   runs.push({
     run_id: crypto.randomUUID(), created_at: story.createdAt,
@@ -960,8 +1000,7 @@ async function generateStory(previousStory) {
   try { localStorage.setItem('story-sequence-runs', JSON.stringify(runs)); } catch { saved = false; }
   highest = 3;
   renderStory(sequence);
-  const notices = [musicError, saved ? '' : 'Run saved for this tab. Download metrics before closing it.'];
-  notify(notices.filter(Boolean).join(' '));
+  notify(saved ? '' : 'Run saved for this tab. Download metrics before closing it.');
   show(3);
 }
 

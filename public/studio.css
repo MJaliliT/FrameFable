@@ -231,6 +231,7 @@ button[aria-pressed="true"] { color: var(--accent); background: var(--accent-sof
 .story-narration button:hover:not(:disabled) { background: var(--accent-hover); color: var(--on-accent); }
 .story-narration span, .narration-status { color: var(--muted); font-size: .85rem; }
 .story-soundtrack { margin-top: 9px; }
+.story-soundtrack:empty { display: none; }
 .story-soundtrack button { background: var(--surface); color: var(--accent); border-color: var(--accent-line); }
 .story-soundtrack button:hover:not(:disabled) { background: var(--accent-soft); color: var(--ink); }
 .narration-status { margin: 0; }

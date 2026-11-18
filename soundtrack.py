@@ -1,8 +1,11 @@
 """Generate a short, loopable instrumental soundtrack on this computer."""
 
 import io
+import json
 import logging
 import os
+import subprocess
+import sys
 import wave
 from functools import lru_cache
 from pathlib import Path
@@ -121,6 +124,7 @@ def synthesize_music(data):
 JOB_LOCK = Lock()
 JOBS = {}
 JOB_TTL_SECONDS = 900
+WORKER_TIMEOUT_SECONDS = 300
 MAX_SAVED_JOBS = 8
 
 
@@ -142,9 +146,30 @@ def start_soundtrack(data):
     return job
 
 
+def run_musicgen_worker(data):
+    try:
+        worker = subprocess.run(
+            [sys.executable, "-B", str(Path(__file__).resolve()), "--render"],
+            input=json.dumps(data).encode(), capture_output=True, timeout=WORKER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise SoundtrackError("MusicGen exceeded the five-minute server limit.") from error
+    if worker.returncode != 0:
+        logging.error("MusicGen worker exited with status %s: %s", worker.returncode,
+                      worker.stderr[-2500:].decode(errors="replace").strip() or "no diagnostic output")
+        try:
+            error = json.loads(worker.stdout).get("error")
+        except (ValueError, AttributeError):
+            error = None
+        raise SoundtrackError(error or "MusicGen stopped unexpectedly. Check the VPS service logs.")
+    if not worker.stdout.startswith(b"RIFF"):
+        raise SoundtrackError("MusicGen did not return a WAV soundtrack.")
+    return worker.stdout
+
+
 def _run_soundtrack(job, data):
     try:
-        result = synthesize_music(data)
+        result = run_musicgen_worker(data)
     except SoundtrackError as error:
         result = str(error)
         if error.__cause__:
@@ -185,4 +210,14 @@ def prepare_model():
 
 
 if __name__ == "__main__":
-    prepare_model()
+    if sys.argv[1:] == ["--render"]:
+        try:
+            audio = synthesize_music(json.load(sys.stdin))
+        except SoundtrackError as error:
+            if error.__cause__:
+                logging.exception("MusicGen failed to generate audio")
+            print(json.dumps({"error": str(error)}))
+            raise SystemExit(1) from None
+        sys.stdout.buffer.write(audio)
+    else:
+        prepare_model()

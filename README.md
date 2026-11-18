@@ -39,7 +39,7 @@ MusicGen Small runs locally for noncommercial use, with no music-service key or 
 ./run.sh
 ```
 
-The checkpoint download is about 2.36 GB. The panel generates a 20-second instrumental loop based on the story’s theme and tone before showing the story, then starts the loop automatically. **Mute music** silences the soundtrack. The music continues at lower volume during narration and stops when you leave the story page. Music generation runs on this computer and can take several minutes. [MusicGen Small model card](https://huggingface.co/facebook/musicgen-small)
+The checkpoint download is about 2.36 GB. The panel starts making a 20-second instrumental loop based on the story’s theme and tone before showing the story. If the music takes more than 40 seconds, the story opens while it finishes. The loop starts automatically when ready. **Mute music** silences the soundtrack. The music continues at lower volume during narration and stops when you leave the story page. Music generation runs on this computer and can take several minutes. [MusicGen Small model card](https://huggingface.co/facebook/musicgen-small)
 
 ## Enable OpenAI narration
 

@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import subprocess
 import wave
 import threading
 import unittest
@@ -11,7 +12,7 @@ from unittest.mock import patch
 from detector import DetectorUnavailable, INFERENCE_LOCK, choose_detection, locate_subjects
 from main import StudioHandler
 from narration import NarrationError, collect_audio, narration_events
-from soundtrack import LOOP_SECONDS, make_loop, music_prompt
+from soundtrack import LOOP_SECONDS, SoundtrackError, make_loop, music_prompt, run_musicgen_worker
 from providers import StudioError, execute
 
 OPENAI = {"provider": "openai", "model": "gpt-6.1-terra", "bridgeImages": True}
@@ -153,6 +154,12 @@ class SoundtrackTests(unittest.TestCase):
         self.assertIn("mysterious", prompt)
         self.assertIn("without vocals", prompt)
 
+    def test_musicgen_worker_has_a_hard_timeout(self):
+        with patch("soundtrack.subprocess.run", side_effect=subprocess.TimeoutExpired("MusicGen", 300)) as worker:
+            with self.assertRaisesRegex(SoundtrackError, "five-minute server limit"):
+                run_musicgen_worker({"description": "Soft piano"})
+        self.assertEqual(worker.call_args.kwargs["timeout"], 300)
+
     def test_wav_loop_has_the_requested_duration_and_a_continuous_seam(self):
         try:
             import numpy as np
@@ -223,7 +230,7 @@ class HttpTests(unittest.TestCase):
             self.assertTrue(ready.wait(5))
             return b"RIFF-loop"
 
-        with patch("soundtrack.synthesize_music", side_effect=render):
+        with patch("soundtrack.run_musicgen_worker", side_effect=render):
             try:
                 status, _, body = send("soundtrack-start", description)
                 self.assertEqual(status, 202)
