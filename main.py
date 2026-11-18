@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from narration import NarrationError, synthesize
 from providers import StudioError, execute
-from soundtrack import SoundtrackError, synthesize_music
+from soundtrack import SoundtrackError, soundtrack_result, start_soundtrack
 from story_pdf import StoryPdfError, make_story_pdf
 
 PUBLIC = Path(__file__).resolve().parent / "public"
@@ -134,13 +134,20 @@ class StudioHandler(BaseHTTPRequestHandler):
                 return
             self.send(200, audio, "audio/wav")
             return
-        if isinstance(body, dict) and body.get("action") == "soundtrack":
+        action = body.get("action") if isinstance(body, dict) else None
+        if action in ("soundtrack-start", "soundtrack-result"):
             try:
-                audio = synthesize_music(body.get("data"))
+                if action == "soundtrack-start":
+                    job = start_soundtrack(body.get("data"))
+                    self.send_json(202, {"result": {"job": job}})
+                else:
+                    audio = soundtrack_result(body.get("data"))
+                    if audio is None:
+                        self.send_json(202, {"result": {"status": "composing"}})
+                    else:
+                        self.send(200, audio, "audio/wav")
             except SoundtrackError as error:
                 self.send_json(400, {"error": str(error)})
-                return
-            self.send(200, audio, "audio/wav")
             return
         try:
             result = execute(body, key=key)

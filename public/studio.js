@@ -160,9 +160,20 @@ async function request(action, data, config = settings, credential = apiKey, sig
       headers: { 'Content-Type': 'application/json', ...(config.provider === 'openai' && credential ? { 'X-OpenAI-Key': credential } : {}) },
       body: JSON.stringify({ action, settings: config, data })
     });
-    if (response.ok && ['narrate', 'soundtrack'].includes(action)) return await response.blob();
-    const answer = await response.json();
-    if (!response.ok) throw new Error(answer.error || 'The local server could not complete the request.');
+    const contentType = response.headers.get('Content-Type') || '';
+    if (response.ok && contentType.startsWith('audio/') && ['narrate', 'soundtrack-result'].includes(action)) {
+      return await response.blob();
+    }
+    if (!contentType.includes('application/json')) {
+      if ([502, 503, 504, 524].includes(response.status)) {
+        throw new Error('The server or reverse proxy is temporarily unavailable (HTTP ' + response.status + ').');
+      }
+      throw new Error('FrameFable returned an unexpected response (HTTP ' + response.status + ').');
+    }
+    let answer;
+    try { answer = await response.json(); }
+    catch { throw new Error('FrameFable returned an incomplete or invalid response (HTTP ' + response.status + ').'); }
+    if (!response.ok) throw new Error(answer.error || 'FrameFable could not complete the request.');
     if (tracked) ledger.push({ ...answer.metric, status: 'completed', wall_ms: Math.round(performance.now() - started) });
     return answer.result;
   } catch (error) {
@@ -805,9 +816,20 @@ function clearSoundtrack() {
 
 async function prepareSoundtrack(description, tone) {
   if (!musicContext) throw new Error('This browser does not support background audio.');
-  const audio = await request('soundtrack', { tone, description }, {}, '');
-  if (!audio.size || !audio.type.startsWith('audio/')) throw new Error('No playable music was returned.');
-  return await musicContext.decodeAudioData(await audio.arrayBuffer());
+  const { job } = await request('soundtrack-start', { tone, description }, {}, '');
+  if (!job) throw new Error('The server did not return a music job.');
+  const start = performance.now();
+  while (performance.now() - start < 12 * 60_000) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const result = await request('soundtrack-result', { job }, {}, '');
+    if (result instanceof Blob) {
+      if (!result.size) throw new Error('MusicGen returned an empty audio file.');
+      try { return await musicContext.decodeAudioData(await result.arrayBuffer()); }
+      catch { throw new Error('The browser could not decode the generated soundtrack.'); }
+    }
+    if (result?.status !== 'composing') throw new Error('The server returned an unknown music job status.');
+  }
+  throw new Error('MusicGen is taking longer than 12 minutes to finish.');
 }
 
 function storyHeader() {
@@ -890,7 +912,7 @@ async function generateStory(previousStory) {
     throw new Error('The story did not include every scene. Try generating again.');
   }
   stopSoundtrack();
-  notify('Composing the background music. This may take a minute…');
+  notify('Composing the background music. This may take several minutes…');
   const description = result.musicDescription?.trim().slice(0, 300) || 'Gentle acoustic storybook music.';
   let soundtrack;
   let musicError = '';

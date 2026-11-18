@@ -201,15 +201,34 @@ class HttpTests(unittest.TestCase):
             self.assertEqual(self.request("POST", "/api/run", json.dumps(payload), headers)[0], 400)
             self.assertEqual(synthesize.call_count, 1)
 
-    def test_soundtrack_route_uses_the_local_model_without_a_key(self):
-        data = {"description": "Soft piano", "tone": "Mystery"}
-        payload = {"action": "soundtrack", "data": data}
-        with patch("main.synthesize_music", return_value=b"RIFF-loop") as synthesize_music:
-            status, headers, body = self.request(
-                "POST", "/api/run", json.dumps(payload), {"Content-Type": "application/json"},
-            )
-        synthesize_music.assert_called_once_with(data)
-        self.assertEqual((status, headers["Content-Type"], body), (200, "audio/wav", b"RIFF-loop"))
+    def test_soundtrack_starts_and_polls_without_holding_the_request_open(self):
+        ready = threading.Event()
+        headers = {"Content-Type": "application/json"}
+        description = {"description": "Soft piano", "tone": "Mystery"}
+
+        def send(action, data):
+            return self.request("POST", "/api/run", json.dumps({"action": action, "data": data}), headers)
+
+        def render(data):
+            self.assertEqual(data, description)
+            self.assertTrue(ready.wait(5))
+            return b"RIFF-loop"
+
+        with patch("soundtrack.synthesize_music", side_effect=render):
+            try:
+                status, _, body = send("soundtrack-start", description)
+                self.assertEqual(status, 202)
+                job = {"job": json.loads(body)["result"]["job"]}
+                status, _, body = send("soundtrack-result", job)
+                self.assertEqual(status, 202)
+                self.assertEqual(json.loads(body)["result"]["status"], "composing")
+            finally:
+                ready.set()
+            for _ in range(20):
+                status, response_headers, body = send("soundtrack-result", job)
+                if status != 202:
+                    break
+            self.assertEqual((status, response_headers["Content-Type"], body), (200, "audio/wav", b"RIFF-loop"))
 
     def test_hosted_requests_require_the_exact_https_origin(self):
         hostname = "stories.example.com"

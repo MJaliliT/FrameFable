@@ -119,6 +119,8 @@ main { position: relative; display: flex; flex-direction: column; }
   border-top: 1px solid var(--line); background: var(--surface); color: var(--muted);
   padding: 14px clamp(20px, 4vw, 56px); font-size: .85rem; line-height: 1.5;
 }
+.footer-brand { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.site-footer a { color: var(--accent); text-underline-offset: .18em; }
 .page-heading { margin-bottom: 25px; }
 #step-label { margin: 0 0 .4rem; color: var(--accent); font-size: .78rem; font-weight: 550; letter-spacing: .1em; text-transform: uppercase; }
 h1, h2, h3, p { margin-top: 0; }

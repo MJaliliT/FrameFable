@@ -1,11 +1,14 @@
 """Generate a short, loopable instrumental soundtrack on this computer."""
 
 import io
+import logging
 import os
 import wave
 from functools import lru_cache
 from pathlib import Path
-from threading import Lock
+from secrets import token_urlsafe
+from threading import Lock, Thread
+from time import monotonic
 
 MODEL_ID = "facebook/musicgen-small"
 MODEL_DIR = Path(__file__).resolve().parent / ".models" / "musicgen-small"
@@ -113,6 +116,61 @@ def synthesize_music(data):
         raise SoundtrackError("MusicGen could not generate a soundtrack on this computer.") from error
     finally:
         GENERATION_LOCK.release()
+
+
+JOB_LOCK = Lock()
+JOBS = {}
+JOB_TTL_SECONDS = 900
+MAX_SAVED_JOBS = 8
+
+
+def start_soundtrack(data):
+    music_prompt(data)
+    with JOB_LOCK:
+        if any(result is None for result in JOBS.values()):
+            raise SoundtrackError("MusicGen is already composing a soundtrack. Try again when it finishes.")
+        for job, (finished, _) in list(JOBS.items()):
+            if monotonic() - finished >= JOB_TTL_SECONDS or len(JOBS) >= MAX_SAVED_JOBS:
+                del JOBS[job]
+        job = token_urlsafe(24)
+        JOBS[job] = None
+        try:
+            Thread(target=_run_soundtrack, args=(job, data), daemon=True).start()
+        except RuntimeError as error:
+            del JOBS[job]
+            raise SoundtrackError("The server could not start MusicGen. Try again.") from error
+    return job
+
+
+def _run_soundtrack(job, data):
+    try:
+        result = synthesize_music(data)
+    except SoundtrackError as error:
+        result = str(error)
+        if error.__cause__:
+            logging.exception("MusicGen job failed")
+    except Exception:
+        logging.exception("Unexpected MusicGen error")
+        result = "MusicGen encountered an unexpected server error. Check the FrameFable service logs."
+    with JOB_LOCK:
+        JOBS[job] = (monotonic(), result)
+
+
+def soundtrack_result(data):
+    job = data.get("job") if isinstance(data, dict) else None
+    with JOB_LOCK:
+        if not isinstance(job, str) or job not in JOBS:
+            raise SoundtrackError("This music job is no longer available. The server may have restarted.")
+        completed = JOBS[job]
+        if completed is None:
+            return None
+        finished, result = completed
+        if monotonic() - finished >= JOB_TTL_SECONDS:
+            del JOBS[job]
+            raise SoundtrackError("This music job has expired.")
+    if isinstance(result, str):
+        raise SoundtrackError(result)
+    return result
 
 
 def prepare_model():
