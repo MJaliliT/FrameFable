@@ -20,7 +20,13 @@
   <button type="button" id="settings-button" class="settings-button"><span aria-hidden="true">⚙</span> Settings <small id="provider-badge">OpenAI</small></button>
 </aside>
 <main>
-  <header class="topbar"><span>Story workspace</span><button type="button" id="exports">Research exports</button></header>
+  <header class="topbar">
+    <span>Story workspace</span>
+    <div class="topbar-actions">
+      <button type="button" id="theme-toggle">Dark mode</button>
+      <button type="button" id="exports">Research exports</button>
+    </div>
+  </header>
   <div class="workspace">
     <header class="page-heading"><p id="step-label"></p><h1 id="page-title"></h1><p id="page-description"></p></header>
     <p id="status" class="status" role="status" hidden></p>

@@ -1,4 +1,26 @@
 const $ = (id) => document.getElementById(id);
+const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+let savedTheme;
+try { savedTheme = localStorage.getItem('framefable-theme'); } catch { /* Storage can be disabled. */ }
+if (!['light', 'dark'].includes(savedTheme)) savedTheme = undefined;
+
+function applyTheme() {
+  const theme = savedTheme ?? (systemTheme.matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = theme;
+  const next = theme === 'dark' ? 'Light mode' : 'Dark mode';
+  $('theme-toggle').textContent = next;
+  $('theme-toggle').setAttribute('aria-label', 'Switch to ' + next.toLowerCase());
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#142034' : '#eef3fc';
+}
+
+$('theme-toggle').addEventListener('click', () => {
+  savedTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('framefable-theme', savedTheme); } catch { /* Storage can be disabled. */ }
+  applyTheme();
+});
+systemTheme.addEventListener('change', applyTheme);
+applyTheme();
+
 const storyTimestamp = new Intl.DateTimeFormat('en-US', {
   year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
 });
@@ -111,6 +133,7 @@ async function work(task, { coverPanel = false } = {}) {
   if (coverPanel) {
     $('analysis-overlay').hidden = false;
     $('exports').disabled = true;
+    $('theme-toggle').disabled = true;
   }
   stages.forEach((id) => { $(id).inert = true; });
   renderNavigation();
@@ -121,6 +144,7 @@ async function work(task, { coverPanel = false } = {}) {
     if (coverPanel) {
       $('analysis-overlay').hidden = true;
       $('exports').disabled = false;
+      $('theme-toggle').disabled = false;
     }
     stages.forEach((id) => { $(id).inert = false; });
     renderNavigation();
