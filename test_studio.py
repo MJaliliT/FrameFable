@@ -2,6 +2,8 @@ import base64
 import io
 import json
 import subprocess
+import tempfile
+import time
 import wave
 import threading
 import unittest
@@ -9,6 +11,7 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 
+from experiments import questions_for, variants_for
 from detector import DetectorUnavailable, INFERENCE_LOCK, choose_detection, locate_subjects
 from main import StudioHandler
 from narration import NarrationError, collect_audio, narration_events
@@ -30,6 +33,8 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(headers["Authorization"], "Bearer fixture")
             self.assertFalse(payload["store"])
             self.assertTrue(payload["text"]["format"]["strict"])
+            self.assertEqual(payload["temperature"], 0 if experiment else 1)
+            self.assertNotIn("seed", payload)
             self.assertEqual(payload["input"][0]["content"][1]["image_url"], IMAGE)
             return {
                 "model": "gpt-6.1-terra",
@@ -37,8 +42,10 @@ class ProviderTests(unittest.TestCase):
                 "usage": {"input_tokens": 100, "input_tokens_details": {"cached_tokens": 50}, "output_tokens": 20},
             }
 
-        result = execute({"action": "analyze", "settings": OPENAI, "data": {"image": IMAGE}},
-                         key="fixture", request=request)
+        for experiment in (False, True):
+            with self.subTest(experiment=experiment):
+                result = execute({"action": "analyze", "settings": OPENAI, "data": {"image": IMAGE}},
+                                 key="fixture", request=request, experiment=experiment)
         self.assertEqual(result["result"], OBSERVATION)
         self.assertAlmostEqual(result["metric"]["usd"], 0.0001525)
 
@@ -52,14 +59,33 @@ class ProviderTests(unittest.TestCase):
                 return {"capabilities": ["completion", "vision"]}
             self.assertEqual(payload["messages"][1]["images"], ["YQ=="])
             self.assertEqual(payload["format"]["type"], "object")
+            self.assertEqual(payload["options"]["temperature"], 0)
+            self.assertEqual(payload["options"]["seed"], 0)
             return {"message": {"content": json.dumps(OBSERVATION)}, "prompt_eval_count": 121, "eval_count": 31}
 
         result = execute({"action": "analyze", "settings": OLLAMA, "data": {"image": IMAGE}},
-                         key="fixture", request=request)
+                         key="fixture", request=request, experiment=True)
         self.assertEqual(calls, ["http://127.0.0.1:11434/api/show", "http://127.0.0.1:11434/api/chat"])
         self.assertEqual(result["result"], OBSERVATION)
         self.assertEqual(result["metric"]["usage"], {"input_tokens": 121, "output_tokens": 31})
         self.assertIsNone(result["metric"]["usd"])
+
+    def test_regular_ollama_requests_draw_a_fresh_seed(self):
+        body = {"action": "check", "settings": OLLAMA}
+        options = []
+
+        def request(url, payload, _headers):
+            if url.endswith("/api/show"):
+                return {"capabilities": ["vision"]}
+            options.append(payload["options"])
+            return {"message": {"content": json.dumps({"result": "Fixture"})}}
+
+        with patch("providers.randbelow", side_effect=[123, 456]):
+            execute(body, request=request)
+            execute(body, request=request)
+
+        self.assertEqual([option["seed"] for option in options], [123, 456])
+        self.assertEqual([option["temperature"] for option in options], [1, 1])
 
     def test_ollama_rejects_text_only_and_remote_hosts(self):
         def request(url, _payload, _headers):
@@ -160,6 +186,17 @@ class SoundtrackTests(unittest.TestCase):
                 run_musicgen_worker({"description": "Soft piano"})
         self.assertEqual(worker.call_args.kwargs["timeout"], 300)
 
+    def test_wav_loop_rejects_a_short_burst_with_a_long_quiet_tail(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("The optional MusicGen dependencies are unavailable.")
+        rate = 1000
+        samples = np.full((1, 21 * rate), 0.0001, dtype=np.float32)
+        samples[:, :rate * 3] = 0.15
+        with self.assertRaisesRegex(SoundtrackError, "mostly quiet"):
+            make_loop(samples, rate)
+
     def test_wav_loop_has_the_requested_duration_and_a_continuous_seam(self):
         try:
             import numpy as np
@@ -245,6 +282,70 @@ class HttpTests(unittest.TestCase):
                 if status != 202:
                     break
             self.assertEqual((status, response_headers["Content-Type"], body), (200, "audio/wav", b"RIFF-loop"))
+
+    def test_experiment_batch_saves_media_and_validates_votes(self):
+        image = {"id": "image-1", "name": "Moon", "src": IMAGE}
+        data = {"tones": ["Humorous", "Mystery"], "levels": ["Beginning"], "lengths": [250],
+                "settings": OPENAI, "images": [image, {**image, "id": "image-2"}],
+                "observations": [{"scene": 1, "action": "Pip looks up", "setting": "Garden", "subjects": []},
+                                 {"scene": 2, "action": "Pip heads home", "setting": "Garden", "subjects": []}],
+                "subjects": []}
+        self.assertEqual(len(variants_for(data)), 2)
+
+        def model(body, **_kwargs):
+            results = {
+                "plan": {"bridges": [{"after": 1, "description": "Pip follows the moonlight."}]},
+                "image": IMAGE.replace("image/jpeg", "image/png"),
+                "story": {"title": "The Moon", "musicDescription": "Piano",
+                          "scenes": [{"scene": index, "text": "Pip saw the moon."} for index in range(1, 4)]},
+            }
+            return {"result": results[body["action"]],
+                    "metric": {"model": "fixture", "usage": {"input_tokens": 100, "output_tokens": 20}}}
+
+        host = "framefable.example.com"
+        origin = f"https://{host}"
+        headers = {"Host": host}
+
+        def post(action, **fields):
+            request_headers = {**headers, "Origin": origin, "Content-Type": "application/json"}
+            if action == "create":
+                request_headers["X-OpenAI-Key"] = "fixture"
+            status, _, response = self.request("POST", "/api/experiments", json.dumps({"action": action, **fields}),
+                                               request_headers)
+            return status, json.loads(response)
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"FRAMEFABLE_EXPERIMENTS_DIR": directory,
+                                                                               "FRAMEFABLE_PUBLIC_ORIGIN": origin}):
+            with patch("experiments.execute", side_effect=model), patch("experiments.make_story_pdf", return_value=b"%PDF-fixture"), patch("experiments.run_musicgen_worker", return_value=b"RIFF-fixture"), patch("experiments.synthesize", return_value=b"RIFF-voice"):
+                status, created = post("create", data=data)
+                self.assertEqual(status, 200, created)
+                ident = created["id"]
+                for _ in range(100):
+                    _, progress = post("status", id=ident)
+                    if progress["status"] != "running":
+                        break
+                    time.sleep(0.01)
+                self.assertEqual(progress["status"], "completed")
+            _, review = post("review", id=ident)
+            self.assertEqual([item["wordCount"] for item in review["variants"]], [12, 12])
+            self.assertIn("bridge-1.png", review["variants"][0]["media"])
+            root = f"/api/experiments/{ident}/1"
+            status, image_headers, image_data = self.request("GET", root + "/bridge-1.png", headers=headers)
+            self.assertEqual((status, image_headers["Content-Type"], image_data), (200, "image/png", b"a"))
+            status, pdf_headers, pdf_data = self.request("GET", root + "/story.pdf", headers=headers)
+            self.assertEqual((status, pdf_data), (200, b"%PDF-fixture"))
+            self.assertIn("frame-ancestors 'self'", pdf_headers["Content-Security-Policy"])
+            status, _, audio = self.request("GET", root + "/music.wav", headers={**headers, "Range": "bytes=0-3"})
+            self.assertEqual((status, audio), (206, b"RIFF"))
+            self.assertEqual(post("vote", id=ident, voter="Reviewer", ratings={})[0], 400)
+            votes = {str(item["index"]): {key: 4 for key in questions_for(item)} for item in review["variants"]}
+            status, report = post("vote", id=ident, voter="Reviewer", ratings=votes)
+            self.assertEqual((status, report["meanScore"]), (200, 4))
+            pdf = base64.b64decode(report.pop("reportPdf"), validate=True)
+            self.assertTrue(pdf.startswith(b"%PDF-"))
+            self.assertEqual(report["ratings"], votes)
+            for criterion in ("subject_accuracy", "box_accuracy"):
+                self.assertEqual(report["criteria"][criterion]["distribution"], [0, 0, 0, 2, 0])
 
     def test_hosted_requests_require_the_exact_https_origin(self):
         hostname = "stories.example.com"

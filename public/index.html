@@ -18,6 +18,7 @@
     <button type="button" data-step="3"><span>04</span> Story &amp; results</button>
   </nav>
   <button type="button" id="settings-button" class="settings-button"><span aria-hidden="true">⚙</span> Settings <small id="provider-badge">OpenAI</small></button>
+  <button type="button" id="experiments-button" class="experiments-button">Run Experiments</button>
 </aside>
 <main>
   <header class="topbar">
@@ -40,7 +41,7 @@
         </label>
         <ol id="sequence" class="image-grid"></ol>
       </section>
-      <section class="card">
+      <section class="card" id="single-preferences">
         <div class="card-header"><div><h2>Story preferences</h2><p>Choose a tone, reading level, and approximate length.</p></div></div>
         <div class="fields preferences">
           <label>Tone<select id="tone"><option>Humorous</option><option>Suspenseful</option><option>Mystery</option></select></label>
@@ -48,11 +49,12 @@
           <label>Story length<select id="length"><option value="250">Short · ~250 words</option><option value="450" selected>Medium · ~450 words</option><option value="750">Long · ~750 words</option></select></label>
         </div>
       </section>
+      <section id="experiment-options" class="card" hidden></section>
       <div class="actions"><button id="analyze" class="primary">Analyze images</button></div>
     </section>
     <section id="characters" class="stage" hidden>
       <div id="subject-list"></div>
-      <div class="actions"><button data-back="0">Back to setup</button><button id="plan" class="primary">Find connecting scenes</button></div>
+      <div class="actions"><button data-back="0">Back to setup</button><button id="plan" class="primary">Find connecting scenes</button><button id="begin-experiment" class="primary" hidden>Run combinations</button></div>
     </section>
     <section id="bridges" class="stage" hidden>
       <section class="card" id="bridge-sequence-card" hidden>
@@ -73,6 +75,7 @@
         </div>
       </div>
     </section>
+    <section id="experiments" hidden></section>
   </div>
   <footer class="site-footer">
     <span>A group project by Mohammad Jalili Torkamani, Sheila Foley, and Roxana Shajarian.</span>

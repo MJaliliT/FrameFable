@@ -1,3 +1,5 @@
+import { setupExperiments } from './experiments.js';
+
 const $ = (id) => document.getElementById(id);
 const hosted = window.location.protocol === 'https:';
 const defaultOllamaEndpoint = 'http://127.0.0.1:11434';
@@ -61,6 +63,8 @@ let musicRequest;
 const MUSIC_WAIT_BEFORE_READING = 40_000;
 let musicMuted = false;
 let ledger = [];
+let experimentMode = false;
+let experimentAnalysis = [];
 let analysisCacheHits = 0;
 let matchCacheHit = false;
 let subjectSignature = '';
@@ -104,12 +108,13 @@ function notify(message = '', error = false, target = 'status') {
 function renderNavigation() {
   document.querySelectorAll('[data-step]').forEach((node) => {
     const index = Number(node.dataset.step);
-    node.disabled = busy || index > highest;
+    node.disabled = busy || index > highest || (experimentMode && index > 1);
     if (index === step) node.setAttribute('aria-current', 'step');
     else node.removeAttribute('aria-current');
   });
   $('analyze').disabled = !images.length;
   $('settings-button').disabled = busy;
+  $('experiments-button').disabled = busy;
   $('provider-badge').textContent = settings.provider === 'openai' ? 'OpenAI' : 'Ollama';
 }
 
@@ -119,6 +124,7 @@ function show(index, focus = true) {
     stopSoundtrack();
   }
   step = index;
+  $('experiments').hidden = true;
   stages.forEach((id, number) => { $(id).hidden = number !== index; });
   $('step-label').textContent = 'Step ' + (index + 1) + ' of ' + stages.length;
   [$('page-title').textContent, $('page-description').textContent] = headings[index];
@@ -157,12 +163,13 @@ async function work(task, { coverPanel = false } = {}) {
 
 async function request(action, data, config = settings, credential = apiKey, signal) {
   const started = performance.now();
+  const audit = experimentMode && ['analyze', 'match', 'localize', 'refine'].includes(action);
   const tracked = ['analyze', 'localize', 'refine', 'match', 'plan', 'story', 'image'].includes(action);
   try {
     const response = await fetch('/api/run', {
       method: 'POST', signal,
       headers: { 'Content-Type': 'application/json', ...(config.provider === 'openai' && credential ? { 'X-OpenAI-Key': credential } : {}) },
-      body: JSON.stringify({ action, settings: config, data })
+      body: JSON.stringify({ action, settings: config, data, ...(audit && { audit }) })
     });
     const contentType = response.headers.get('Content-Type') || '';
     if (response.ok && contentType.startsWith('audio/') && ['narrate', 'soundtrack-result'].includes(action)) {
@@ -179,6 +186,9 @@ async function request(action, data, config = settings, credential = apiKey, sig
     catch { throw new Error('FrameFable returned an incomplete or invalid response (HTTP ' + response.status + ').'); }
     if (!response.ok) throw new Error(answer.error || 'FrameFable could not complete the request.');
     if (tracked) ledger.push({ ...answer.metric, status: 'completed', wall_ms: Math.round(performance.now() - started) });
+    if (audit) experimentAnalysis.push({ ...answer.metric, providerInputs: answer.providerInputs ?? [],
+      ...(action === 'localize' && { candidates: data.candidates, imageDigest: await imageDigest(data.image) }),
+      ...(action === 'refine' && { cropImage: data.image }) });
     return answer.result;
   } catch (error) {
     if (tracked) ledger.push({ action, model: config.model, status: 'failed', usage: null, usd: null,
@@ -186,6 +196,12 @@ async function request(action, data, config = settings, credential = apiKey, sig
     if (error instanceof TypeError) throw new Error('Could not reach the local studio server. Check that python3 main.py is running.');
     throw error;
   }
+}
+
+async function imageDigest(src) {
+  const bytes = Uint8Array.from(atob(src.split(',')[1]), (character) => character.charCodeAt(0));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function invalidateAfter(index) {
@@ -1236,9 +1252,52 @@ for (const id of ['tone', 'level', 'length']) $(id).addEventListener('change', (
 for (const node of document.querySelectorAll('[data-step], [data-back]')) {
   node.addEventListener('click', () => {
     notify();
+    if (!$('experiments').hidden) {
+      experimentMode = false;
+      $('single-preferences').hidden = false;
+      $('experiment-options').hidden = true;
+      $('plan').hidden = false;
+      $('begin-experiment').hidden = true;
+    }
     show(Number(node.dataset.step ?? node.dataset.back));
   });
 }
 
 renderImages();
 show(0, false);
+setupExperiments({
+  startSetup() {
+    experimentMode = true;
+    experimentAnalysis = [];
+    subjectSignature = '';
+    for (const image of images) image.analysis.clear();
+    invalidateAfter(0);
+    $('single-preferences').hidden = true;
+    $('experiment-options').hidden = false;
+    $('plan').hidden = true;
+    $('begin-experiment').hidden = false;
+    notify();
+    show(0);
+  },
+  showPanel(title, description) {
+    storyAudio.pause();
+    stopSoundtrack();
+    stages.forEach((id) => { $(id).hidden = true; });
+    $('experiments').hidden = false;
+    $('step-label').textContent = '';
+    $('page-title').textContent = title;
+    $('page-description').textContent = description;
+    notify();
+    window.scrollTo(0, 0);
+  },
+  payload() {
+    return {
+      settings: { ...settings },
+      images: images.map(({ id, name, src }) => ({ id, name, src })),
+      observations: observations(),
+      subjects,
+      analysisCalls: experimentAnalysis
+    };
+  },
+  credential: () => apiKey
+});

@@ -263,3 +263,20 @@ dialog .actions, dialog .status { margin-top: 15px; }
   .story-scene { grid-template-columns: minmax(72px, 105px) minmax(0, 1fr); gap: 12px; }
   .result-actions { gap: 8px; }
 }
+
+.experiments-button { width: 100%; margin-top: 8px; background: var(--nav-active); color: var(--nav-selected); border-color: var(--nav-rule); }
+.experiment-axes, .experiment-menu, .review-subjects { display: flex; flex-wrap: wrap; gap: 14px; }
+.experiment-axes { margin: 14px 0; }
+.experiment-axes fieldset, .rating-fields fieldset { min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.experiment-axes label { margin-block: 6px; }
+#experiments :is(audio, progress, meter) { display: block; width: min(100%, 460px); margin: 8px 0 12px; }
+#experiments .card > button { margin: 8px 8px 0 0; }
+.rating-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr)); gap: 10px; margin: 12px 0; }
+.rating-stars { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.rating-stars label { display: flex; align-items: center; gap: 3px; padding: 3px; border-radius: 4px; }
+.rating-stars label:has(input:checked) { background: var(--accent-soft); color: var(--accent); }
+.experiment-pdf { display: block; width: 100%; height: 65vh; border: 1px solid var(--line); border-radius: 8px; margin: 14px 0 6px; }
+.review-subjects figure { margin: 0; width: min(100%, 210px); }
+.review-subjects figcaption { color: var(--muted); font-size: .85rem; }
+.review-bridges img { display: block; width: min(100%, 320px); height: auto; border-radius: 8px; }
+.review-bridges li + li { margin-top: 16px; }

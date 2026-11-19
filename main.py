@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from experiments import ExperimentError, artifact, batch_path, create, save_votes, snapshot
 from narration import NarrationError, synthesize
 from providers import StudioError, execute
 from soundtrack import SoundtrackError, soundtrack_result, start_soundtrack
@@ -17,11 +18,12 @@ PUBLIC = Path(__file__).resolve().parent / "public"
 STATIC_FILES = {
     "/": ("index.html", "text/html"),
     "/studio.js": ("studio.js", "text/javascript"),
+    "/experiments.js": ("experiments.js", "text/javascript"),
     "/studio.css": ("studio.css", "text/css"),
 }
 MAX_BODY = 3_000_000
 MAX_PDF_BODY = 40_000_000
-CSP = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'"
+CSP = "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self'; base-uri 'none'; frame-ancestors 'none'"
 
 
 def configured_public_origin():
@@ -43,14 +45,17 @@ class StudioHandler(BaseHTTPRequestHandler):
         # Avoid writing details from local requests to logs.
         pass
 
-    def send(self, status, body=b"", content_type=None):
+    def send(self, status, body=b"", content_type=None, headers=None):
         self.send_response(status)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("Content-Security-Policy", CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+                         if content_type == "application/pdf" else CSP)
         self.send_header("Cache-Control", "no-store")
         if content_type:
             self.send_header("Content-Type", content_type)
+        for header, value in (headers or {}).items():
+            self.send_header(header, value)
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -71,6 +76,25 @@ class StudioHandler(BaseHTTPRequestHandler):
         if not self.request_origin():
             self.send(403)
             return
+        if self.path.startswith("/api/experiments/"):
+            try:
+                contents, mime = artifact(self.path)
+            except (ExperimentError, OSError, ValueError):
+                self.send(404)
+                return
+            headers = {"Accept-Ranges": "bytes", "Referrer-Policy": "no-referrer"}
+            byte_range = re.fullmatch(r"bytes=(\d{1,10})-(\d{0,10})", self.headers.get("Range", ""))
+            if byte_range:
+                start = int(byte_range[1])
+                end = min(int(byte_range[2]) if byte_range[2] else len(contents) - 1, len(contents) - 1)
+                if start > end:
+                    self.send(416, headers={**headers, "Content-Range": f"bytes */{len(contents)}"})
+                    return
+                self.send(206, contents[start:end + 1], mime,
+                          {**headers, "Content-Range": f"bytes {start}-{end}/{len(contents)}"})
+            else:
+                self.send(200, contents, mime, headers)
+            return
         static = STATIC_FILES.get(self.path)
         if not static:
             self.send(404)
@@ -88,7 +112,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         if not expected_origin:
             self.send(403)
             return
-        if self.path not in ("/api/run", "/api/story.pdf"):
+        if self.path not in ("/api/run", "/api/story.pdf", "/api/experiments"):
             self.send(404)
             return
         origin = self.headers.get("Origin")
@@ -104,7 +128,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         except ValueError:
             self.send_json(400, {"error": "The request needs a valid content length."})
             return
-        limit = MAX_PDF_BODY if self.path == "/api/story.pdf" else MAX_BODY
+        limit = MAX_PDF_BODY if self.path != "/api/run" else MAX_BODY
         if size > limit:
             self.send_json(413, {"error": "The request is too large."})
             return
@@ -112,6 +136,24 @@ class StudioHandler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(size))
         except (ValueError, UnicodeError, RecursionError):
             self.send_json(400, {"error": "The request must contain valid JSON."})
+            return
+        if self.path == "/api/experiments":
+            try:
+                action = body.get("action") if isinstance(body, dict) else None
+                if action == "create":
+                    result = create(body.get("data"), self.headers.get("X-OpenAI-Key"))
+                elif action in ("status", "review", "vote"):
+                    path = batch_path(body.get("id"))
+                    result = save_votes(path, body) if action == "vote" else snapshot(path, action == "review")
+                else:
+                    raise ExperimentError("Choose a valid experiment action.")
+            except ValueError as error:
+                self.send_json(400, {"error": str(error)})
+                return
+            except OSError:
+                self.send_json(503, {"error": "Experiment storage is unavailable. Ask the server operator to check its permissions."})
+                return
+            self.send_json(200, result)
             return
         if self.path == "/api/story.pdf":
             try:
@@ -150,7 +192,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(error)})
             return
         try:
-            result = execute(body, key=key)
+            audit = [] if isinstance(body, dict) and body.get("audit") is True else None
+            result = execute(body, key=key, audit=audit, experiment=True) if audit is not None else execute(body, key=key)
+            if audit is not None:
+                result["providerInputs"] = audit
         except StudioError as error:
             self.send_json(400, {"error": str(error)})
             return

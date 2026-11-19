@@ -8,3 +8,5 @@ __pycache__/
 *.pem
 *.key
 id_ed25519*
+
+.experiments/

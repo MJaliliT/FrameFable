@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import wave
+from contextlib import redirect_stdout
 from functools import lru_cache
 from pathlib import Path
 from secrets import token_urlsafe
@@ -17,6 +18,8 @@ MODEL_ID = "facebook/musicgen-small"
 MODEL_DIR = Path(__file__).resolve().parent / ".models" / "musicgen-small"
 LOOP_SECONDS = 20
 CROSSFADE_SECONDS = 0.6
+MUSIC_SEED = 0
+MUSIC_OPTIONS = {"do_sample": True, "top_k": 250, "guidance_scale": 3, "max_new_tokens": 1050}
 GENERATION_LOCK = Lock()
 TONE_GUIDANCE = {
     "Humorous": "Playful, light and gentle, with a bouncy acoustic rhythm.",
@@ -54,6 +57,31 @@ def load_musicgen():
         raise SoundtrackError("MusicGen could not load. Check the local setup in the README.") from error
 
 
+def quiet_audio(samples, rate):
+    import numpy as np
+
+    seconds = samples.shape[1] // rate
+    if seconds < LOOP_SECONDS:
+        return True
+    windows = samples[:, :seconds * rate].reshape(samples.shape[0], seconds, rate)
+    rms = np.sqrt(np.mean(windows ** 2, axis=(0, 2)))
+    return bool(np.mean(rms < 0.005) > 0.2 or np.sqrt(np.mean(samples ** 2)) < 0.015)
+
+
+def needs_music_repair(path):
+    import numpy as np
+
+    try:
+        with wave.open(str(path), "rb") as recording:
+            if recording.getsampwidth() != 2 or recording.getframerate() * LOOP_SECONDS != recording.getnframes():
+                return True
+            samples = np.frombuffer(recording.readframes(recording.getnframes()), dtype="<i2")
+            samples = samples.reshape(-1, recording.getnchannels()).T.astype(np.float32) / 32768
+            return quiet_audio(samples, recording.getframerate())
+    except (OSError, EOFError, wave.Error, ValueError):
+        return True
+
+
 def make_loop(samples, rate):
     """Overlap the tail with the head and keep an exact 20-second loop."""
     import numpy as np
@@ -71,7 +99,9 @@ def make_loop(samples, rate):
     peak = float(np.max(np.abs(loop)))
     if peak < 0.001:
         raise SoundtrackError("MusicGen returned silent audio. Try again.")
-    loop *= min(0.78 / peak, 3)
+    loop *= min(0.78 / peak, 0.08 / float(np.sqrt(np.mean(loop ** 2))), 12)
+    if quiet_audio(loop, rate):
+        raise SoundtrackError("MusicGen returned a mostly quiet soundtrack.")
     pcm = (loop.T * 32767).clip(-32768, 32767).astype("<i2")
     output = io.BytesIO()
     with wave.open(output, "wb") as recording:
@@ -101,20 +131,26 @@ def synthesize_music(data):
         torch, processor, model = load_musicgen()
         inputs = processor(text=[prompt], padding=True, return_tensors="pt")
 
-        def generate():
+        def generate(seed):
+            torch.manual_seed(seed)
             with torch.inference_mode():
                 return model.generate(
-                    **inputs.to(model.device), do_sample=True, guidance_scale=3, max_new_tokens=1050,
+                    **inputs.to(model.device), **MUSIC_OPTIONS,
                 )[0].float().cpu().numpy()
 
-        try:
-            audio = generate()
-        except (RuntimeError, NotImplementedError):
-            if model.device.type == "cpu":
-                raise
-            model.to("cpu")
-            audio = generate()
-        return make_loop(audio, model.config.audio_encoder.sampling_rate)
+        for seed in (MUSIC_SEED, MUSIC_SEED + 1):
+            try:
+                audio = generate(seed)
+            except (RuntimeError, NotImplementedError):
+                if model.device.type == "cpu":
+                    raise
+                model.to("cpu")
+                audio = generate(seed)
+            try:
+                return make_loop(audio, model.config.audio_encoder.sampling_rate)
+            except SoundtrackError as error:
+                last_error = error
+        raise last_error
     except (RuntimeError, NotImplementedError) as error:
         raise SoundtrackError("MusicGen could not generate a soundtrack on this computer.") from error
     finally:
@@ -212,7 +248,8 @@ def prepare_model():
 if __name__ == "__main__":
     if sys.argv[1:] == ["--render"]:
         try:
-            audio = synthesize_music(json.load(sys.stdin))
+            with redirect_stdout(sys.stderr):
+                audio = synthesize_music(json.load(sys.stdin))
         except SoundtrackError as error:
             if error.__cause__:
                 logging.exception("MusicGen failed to generate audio")

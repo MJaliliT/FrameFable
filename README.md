@@ -92,3 +92,14 @@ The app estimates cost from reported usage and standard rates for GPT-6.1 Terra,
 ## Verification
 
 Run `python3 -B -m unittest -v` for provider payload, usage, error and HTTP checks with simulated responses. The existing interface was previously browser-tested with the 1-image and 20-image workflows on both simulated providers. It also covered recurring names, bridge illustration insertion, model selection and exports. The live Ollama service was accessible and the app rejected an installed text-only model. Live story generation requires an OpenAI API key or an installed Ollama vision model.
+
+
+## Run experiments and collect ratings
+
+Open **Run Experiments → New experiments**, upload and order your images, and choose the tones, reading levels, and target word counts. The full matrix has 36 combinations. Analyze the images, review the subjects, and enter any names you want held constant. **Run combinations** starts a batch on the server. Bridges are planned for each variant. With OpenAI bridge illustrations enabled, the server also attempts to render those illustrations.
+
+Use **Vote previous one** to reopen a batch or share its unlisted link with a reviewer. Anyone with the link can see the images, variants, and model inputs, so share it only with the intended reviewers. Options involving missing audio or an absent bridge are omitted from the ballot. Completed ballots are saved server-side and available to download as PDF reports with a chart and star distributions, and as JSON with all individual ratings.
+
+The archive saves assets and metrics incrementally in `.experiments/` locally or the service state directory on Linux. Generation continues if the browser closes. A server restart interrupts active batches, and completed variants remain reviewable. Audio errors are recorded per variant. Narration is available for OpenAI batches. The archive accepts one batch at a time, up to 24 saved batches and 768 MB total.
+
+Experiment text and vision requests use temperature 0 and a fixed Ollama seed of 0. The regular panel uses temperature 1 where supported and a fresh random seed for each Ollama request. Experiment batches require a model that accepts temperature 0. OpenAI Responses provides no seed parameter. MusicGen samples with a fixed seed and tries a second fixed seed if the first loop fails the audio level check. Image generation and Realtime narration have their own controls. Outputs can vary across runs or hardware.

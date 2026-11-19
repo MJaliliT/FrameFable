@@ -1,8 +1,11 @@
 """Model provider requests and the studio API response contract."""
 
+import base64
+import hashlib
 import json
 import os
 import re
+from secrets import randbelow
 from time import perf_counter
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -34,6 +37,31 @@ STANDARD_RATES = {
     "gpt-5.4-mini": (0.75, 0.075, 4.5),
 }
 
+
+EXPERIMENT_SEED = 0
+
+
+def sampling_options(model, *, temperature=0):
+    family = MODEL_SNAPSHOT_SUFFIX.sub("", model)
+    if family.startswith("gpt-4.1"):
+        return {"temperature": temperature}
+    if family in {"gpt-6.1-terra", "gpt-6-luna", "gpt-5.2", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"}:
+        return {"temperature": temperature, "reasoning": {"effort": "none"}}
+    return {}
+
+
+def audit_payload(value, binary=False):
+    if isinstance(value, dict):
+        return {key: audit_payload(item, key in ("images", "image_url")) for key, item in value.items()}
+    if isinstance(value, list):
+        return [audit_payload(item, binary) for item in value]
+    if binary and isinstance(value, str):
+        encoded = value.split(",", 1)[-1]
+        return {"sha256": hashlib.sha256(base64.b64decode(encoded)).hexdigest(),
+                "encoding": "data URL" if value.startswith("data:") else "base64"}
+    return value
+
+
 INSTRUCTIONS = {
     "check": (
         "Inspect the attached image and return a short result."
@@ -59,6 +87,7 @@ INSTRUCTIONS = {
         "matches of two or more occurrences in different scenes. Use each ID at most once. Give each group a "
         "short descriptive label."
     ),
+    "names": ("Choose a short distinct story name or label for each supplied subject ID. Preserve every existing name."),
     "plan": (
         "Suggest up to three optional bridges only where adjacent source scenes have a meaningful continuity "
         "gap. Each bridge should be a brief plausible event between numbered scenes; after is the 1-based "
@@ -101,6 +130,7 @@ SCHEMAS = {
     ),
     "refine": object_schema(boxes=array_schema(object_schema(tile=INTEGER, box=BOX))),
     "match": object_schema(groups=array_schema(object_schema(label=STRING, occurrences=array_schema(STRING)))),
+    "names": object_schema(names=array_schema(object_schema(subjectId=STRING, name=STRING))),
     "plan": object_schema(bridges=array_schema(object_schema(after=INTEGER, description=STRING))),
     "story": object_schema(title=STRING, musicDescription=STRING, scenes=array_schema(object_schema(scene=INTEGER, text=STRING))),
 }
@@ -156,10 +186,13 @@ def request_json(url, payload, headers):
 
 
 class Provider:
-    def __init__(self, settings, key, request):
+    def __init__(self, settings, key, request, audit=None, *, experiment=False):
         self.openai = settings.get("provider") == "openai"
         self.base = provider_base(settings)
         self.request = request
+        self.audit = audit
+        self.experiment = experiment
+        self.temperature = 0 if experiment else 1
         self.headers = {"Content-Type": "application/json"}
         if self.openai:
             key = key or os.environ.get("OPENAI_API_KEY")
@@ -168,6 +201,8 @@ class Provider:
             self.headers["Authorization"] = "Bearer " + key
 
     def call(self, path, payload=None):
+        if self.audit is not None:
+            self.audit.append({"endpoint": path, "payload": audit_payload(payload)})
         try:
             response = self.request(self.base + path, payload, self.headers)
         except HTTPError as error:
@@ -209,8 +244,7 @@ class Provider:
                 "input": [{"role": "user", "content": parts}],
                 "text": {"format": {"type": "json_schema", "name": action, "strict": True, "schema": schema}},
             }
-            if model == "gpt-6.1-terra":
-                payload["reasoning"] = {"effort": "none"}
+            payload.update(sampling_options(model, temperature=self.temperature))
             response = self.call("/responses", payload)
             output = None
             if response.get("status") != "incomplete":
@@ -228,7 +262,8 @@ class Provider:
             response = self.call("/api/chat", {
                 "model": model, "stream": False, "format": schema,
                 "options": {"num_predict": limit, "num_ctx": 4096 if image else 8192,
-                            "temperature": 0.65 if action == "story" else 0.1},
+                            "temperature": self.temperature,
+                            "seed": EXPERIMENT_SEED if self.experiment else randbelow(2**31)},
                 "messages": [{"role": "system", "content": instruction}, user_message],
             })
             output = (response.get("message") or {}).get("content")
@@ -307,7 +342,7 @@ def localize(data):
     }}
 
 
-def execute(body, *, key=None, request=request_json):
+def execute(body, *, key=None, request=request_json, audit=None, experiment=False):
     if not isinstance(body, dict):
         raise StudioError("Provide an action and provider settings.")
     action = body.get("action")
@@ -319,7 +354,7 @@ def execute(body, *, key=None, request=request_json):
         raise StudioError("Unknown action.")
     settings = body["settings"]
     data = body.get("data")
-    provider = Provider(settings, key, request)
+    provider = Provider(settings, key, request, audit, experiment=experiment)
     model = settings.get("model")
     if action == "models":
         if provider.openai:
@@ -330,6 +365,8 @@ def execute(body, *, key=None, request=request_json):
         models = provider.call("/api/tags").get("models") or []
         return {"result": [item["name"] for item in models if item.get("name")]}
 
+    if experiment and provider.openai and action != "image" and isinstance(model, str) and not sampling_options(model):
+        raise StudioError("Choose an OpenAI model that supports temperature zero for experiments.")
     started = perf_counter()
     if action == "image":
         if not provider.openai or not settings.get("bridgeImages"):

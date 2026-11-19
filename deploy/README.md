@@ -80,3 +80,51 @@ sudo systemctl restart framefable
 ## Automatic deployments
 
 Once the service is working, follow the [GitHub Actions setup](CI-CD.md) to redeploy on each successful push to `main`.
+
+
+## Persistent experiment archive
+
+The updated systemd template sets `StateDirectory=framefable`. For an existing VPS deployment, apply the same setting once as root before starting experiment batches. This keeps experiment data in `/var/lib/framefable` across CI/CD releases.
+
+```sh
+install -d /etc/systemd/system/framefable.service.d
+printf '[Service]\nStateDirectory=framefable\n' > /etc/systemd/system/framefable.service.d/experiments.conf
+systemctl daemon-reload
+systemctl restart framefable
+```
+
+The archive contains uploaded images, story artifacts, and reviewer names. Back it up if you need to preserve study data. The experiment links are unlisted and can be opened by anyone who has the link.
+
+### Repair quiet music in a saved experiment batch
+
+After deploying the repair script, use the batch code after `#vote=` in the voting link. Run the command first without `--apply` to see which tracks need repair. The example uses the default systemd archive path. If you set `FRAMEFABLE_EXPERIMENTS_DIR` to a custom path in `/etc/framefable.env`, use that path instead.
+
+```bash
+cd /opt/framefable
+BATCH='paste-batch-code-here'
+sudo -u framefable env FRAMEFABLE_EXPERIMENTS_DIR=/var/lib/framefable \
+  .venv/bin/python repair_experiment_music.py "$BATCH"
+sudo -u framefable env FRAMEFABLE_EXPERIMENTS_DIR=/var/lib/framefable \
+  .venv/bin/python repair_experiment_music.py "$BATCH" --apply
+```
+
+Run the repair before sharing the batch for voting. It refuses to replace music if the batch already has submitted ballots. The script uses the installed MusicGen checkpoint and the saved story's music prompt, preserves the original file as `music.original.wav`, and makes no OpenAI requests. Stories, PDFs, and narration stay in place. Run it again to retry any tracks that failed the audio check. Reopen the voting page once repair is complete.
+
+### Share a batch for online voting
+
+Run a new batch on `https://framefable.mjalili.com` and share its voting link, or copy a completed laptop batch to the VPS after deploying the app update. Reviewing a completed batch and submitting votes only use the saved files. Voters do not need an OpenAI key, Ollama, or MusicGen. The VPS needs the PDF dependency from `requirements-pdf.txt` for the voting report.
+
+For a public voting link, turn off HTTP Basic Auth in the FrameFable Nginx server block only if it is still enabled. Validate the config with `nginx -t` and reload it with `systemctl reload nginx`. Set `FRAMEFABLE_PUBLIC_ORIGIN=https://framefable.mjalili.com` in `/etc/framefable.env` and restart the FrameFable service if you change that setting.
+
+To publish a completed laptop batch, run these commands from the project folder on your laptop. Use the code after `#vote=` in the original link. The copy skips local ballots and backups of the replaced soundtracks.
+
+```sh
+BATCH='paste-batch-code-here'
+VPS='root@72.60.165.248'
+STAGING=$(ssh "$VPS" 'mktemp -d /var/lib/framefable/.upload.XXXXXXXX') &&
+rsync -a --exclude=votes/ --exclude=music.original.wav --exclude=.DS_Store \
+  ".experiments/$BATCH/" "$VPS:$STAGING/" &&
+ssh "$VPS" "test -s '$STAGING/batch.json' && chown -R framefable:framefable '$STAGING' && mv -nT '$STAGING' '/var/lib/framefable/$BATCH' && test ! -d '$STAGING'"
+```
+
+If you configured `FRAMEFABLE_EXPERIMENTS_DIR`, use that directory for both VPS paths. The import preserves any existing batch with the same code. Open `https://framefable.mjalili.com/#vote=YOUR_BATCH_CODE` in a private window and confirm the bridge images, audio and PDF load before sharing it. Your laptop stores its own batch separately, so direct reviewers to the HTTPS link.
