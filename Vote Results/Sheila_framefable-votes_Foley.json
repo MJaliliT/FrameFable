@@ -1,0 +1,552 @@
+{
+  "batch": "7930ea23224aa8a11d9b2802ea937f8c",
+  "voter": "Sheila",
+  "createdAt": "2026-11-20T16:48:10.002690+00:00",
+  "ratings": {
+    "1": {
+      "tone": 3,
+      "music": 5,
+      "narration": 5,
+      "length": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 4,
+      "box_accuracy": 5,
+      "bridge_needed": 1,
+      "bridge_helpful": 1
+    },
+    "2": {
+      "length": 2,
+      "tone": 4,
+      "music": 5,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 1,
+      "bridge_helpful": 1
+    },
+    "3": {
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "4": {
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "length": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "5": {
+      "tone": 4,
+      "music": 3,
+      "narration": 5,
+      "length": 3,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "6": {
+      "music": 2,
+      "tone": 4,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "7": {
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "length": 4,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "8": {
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "length": 3,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5
+    },
+    "9": {
+      "length": 2,
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "10": {
+      "length": 3,
+      "tone": 4,
+      "music": 5,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "11": {
+      "length": 2,
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5
+    },
+    "12": {
+      "tone": 4,
+      "music": 4,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5
+    },
+    "13": {
+      "tone": 4,
+      "music": 5,
+      "narration": 5,
+      "length": 4,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "14": {
+      "bridge_needed": 2,
+      "bridge_helpful": 2,
+      "box_accuracy": 5,
+      "subject_accuracy": 5,
+      "identity": 2,
+      "level": 5,
+      "length": 2,
+      "tone": 5,
+      "music": 4,
+      "narration": 5
+    },
+    "15": {
+      "tone": 5,
+      "music": 5,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "16": {
+      "length": 4,
+      "music": 5,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2,
+      "tone": 4
+    },
+    "17": {
+      "music": 3,
+      "tone": 2,
+      "narration": 5,
+      "length": 3,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "18": {
+      "music": 3,
+      "tone": 2,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "19": {
+      "length": 4,
+      "music": 5,
+      "narration": 5,
+      "tone": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "20": {
+      "music": 2,
+      "length": 4,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "bridge_needed": 2,
+      "box_accuracy": 5,
+      "subject_accuracy": 5,
+      "bridge_helpful": 2,
+      "tone": 2
+    },
+    "21": {
+      "music": 3,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2,
+      "tone": 1
+    },
+    "22": {
+      "music": 5,
+      "narration": 5,
+      "length": 4,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2,
+      "tone": 5
+    },
+    "23": {
+      "length": 4,
+      "music": 4,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 1,
+      "bridge_helpful": 1,
+      "tone": 4
+    },
+    "24": {
+      "length": 2,
+      "tone": 5,
+      "music": 5,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "25": {
+      "bridge_needed": 1,
+      "bridge_helpful": 1,
+      "box_accuracy": 5,
+      "subject_accuracy": 5,
+      "identity": 2,
+      "level": 5,
+      "length": 5,
+      "tone": 1,
+      "music": 5,
+      "narration": 5
+    },
+    "26": {
+      "music": 3,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "bridge_needed": 3,
+      "bridge_helpful": 3,
+      "box_accuracy": 5,
+      "subject_accuracy": 3,
+      "length": 5,
+      "tone": 1
+    },
+    "27": {
+      "tone": 4,
+      "music": 3,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 3,
+      "box_accuracy": 5
+    },
+    "28": {
+      "music": 5,
+      "tone": 3,
+      "narration": 5,
+      "length": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2
+    },
+    "29": {
+      "music": 5,
+      "narration": 5,
+      "length": 3,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 4,
+      "bridge_helpful": 4,
+      "tone": 4
+    },
+    "30": {
+      "music": 4,
+      "narration": 5,
+      "length": 1,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2,
+      "tone": 1
+    },
+    "31": {
+      "music": 4,
+      "narration": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "length": 5,
+      "tone": 1
+    },
+    "32": {
+      "length": 5,
+      "level": 5,
+      "identity": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "music": 5,
+      "narration": 5,
+      "bridge_helpful": 1,
+      "bridge_needed": 4,
+      "tone": 4
+    },
+    "33": {
+      "bridge_needed": 4,
+      "bridge_helpful": 4,
+      "box_accuracy": 5,
+      "subject_accuracy": 5,
+      "identity": 2,
+      "level": 5,
+      "length": 2,
+      "tone": 5,
+      "music": 5,
+      "narration": 5
+    },
+    "34": {
+      "length": 5,
+      "music": 5,
+      "narration": 5,
+      "level": 5,
+      "identity": 1,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "bridge_needed": 2,
+      "bridge_helpful": 2,
+      "tone": 1
+    },
+    "35": {
+      "music": 2,
+      "narration": 5,
+      "level": 5,
+      "length": 3,
+      "identity": 2,
+      "box_accuracy": 5,
+      "subject_accuracy": 5,
+      "tone": 1
+    },
+    "36": {
+      "music": 4,
+      "narration": 5,
+      "level": 5,
+      "length": 2,
+      "subject_accuracy": 5,
+      "box_accuracy": 5,
+      "identity": 2,
+      "bridge_needed": 4,
+      "bridge_helpful": 4,
+      "tone": 5
+    }
+  },
+  "variantsRated": 36,
+  "ratingCount": 348,
+  "meanScore": 3.71,
+  "criteria": {
+    "tone": {
+      "question": "How well did the story reflect the requested tone?",
+      "mean": 3.39,
+      "count": 36,
+      "distribution": [
+        7,
+        3,
+        2,
+        17,
+        7
+      ]
+    },
+    "music": {
+      "question": "How appropriate was the background music?",
+      "mean": 4.08,
+      "count": 36,
+      "distribution": [
+        0,
+        3,
+        6,
+        12,
+        15
+      ]
+    },
+    "narration": {
+      "question": "How appropriate was the narration?",
+      "mean": 5,
+      "count": 36,
+      "distribution": [
+        0,
+        0,
+        0,
+        0,
+        36
+      ]
+    },
+    "length": {
+      "question": "How well did the story match the target length?",
+      "mean": 3,
+      "count": 36,
+      "distribution": [
+        8,
+        7,
+        6,
+        7,
+        8
+      ]
+    },
+    "level": {
+      "question": "How well did the story match the target reading level?",
+      "mean": 5,
+      "count": 36,
+      "distribution": [
+        0,
+        0,
+        0,
+        0,
+        36
+      ]
+    },
+    "identity": {
+      "question": "How consistently did the story preserve subject identities?",
+      "mean": 1.97,
+      "count": 36,
+      "distribution": [
+        1,
+        35,
+        0,
+        0,
+        0
+      ]
+    },
+    "subject_accuracy": {
+      "question": "How accurately were the subjects identified?",
+      "mean": 4.86,
+      "count": 36,
+      "distribution": [
+        0,
+        0,
+        2,
+        1,
+        33
+      ]
+    },
+    "box_accuracy": {
+      "question": "How accurately did the boxes fit the subjects?",
+      "mean": 5,
+      "count": 36,
+      "distribution": [
+        0,
+        0,
+        0,
+        0,
+        36
+      ]
+    },
+    "bridge_needed": {
+      "question": "How necessary was the connecting scene?",
+      "mean": 2.17,
+      "count": 30,
+      "distribution": [
+        4,
+        21,
+        1,
+        4,
+        0
+      ]
+    },
+    "bridge_helpful": {
+      "question": "How helpful was the connecting scene?",
+      "mean": 2.07,
+      "count": 30,
+      "distribution": [
+        5,
+        21,
+        1,
+        3,
+        0
+      ]
+    }
+  }
+}
